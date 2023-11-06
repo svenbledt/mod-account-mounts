@@ -20,7 +20,7 @@ public:
             }
 
             std::vector<uint32> Guids;
-            uint32 playerGUID = pPlayer->GetGUID().GetCounter();
+            uint32 playerGUID = pPlayer->GetSession()->GetAccountId();
             QueryResult result1 = CharacterDatabase.Query("SELECT `guid`, `race` FROM `characters` WHERE `account`={};", playerGUID);
 
             if (!result1)
