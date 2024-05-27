@@ -1,3 +1,8 @@
+/*
+* Account share mounts module for AzerothCore ~2.0.
+* copyright (c) since 2018 Dmitry Brusensky <brussens@nativeweb.ru>
+* https://github.com/brussens/ac-account-mounts-module
+*/
 #include "Config.h"
 #include "ScriptMgr.h"
 #include "Chat.h"
@@ -32,12 +37,12 @@ public:
     
     void OnLogin(Player* pPlayer)
     {
-        if (sConfigMgr->GetOption<bool>("Account.Mounts.Enable", true))
-        {
-            if (sConfigMgr->GetOption<bool>("Account.Mounts.Announce", false))
-            {
-                ChatHandler(pPlayer->GetSession()).SendSysMessage("This server is running the |cff4CFF00AccountMounts |rmodule.");
-            }
+       if (sConfigMgr->GetOption<bool>("Account.Mounts.Enable", true))
+       {
+            QueryResult guids = CharacterDatabase.Query(
+                "SELECT `guid` FROM `characters` WHERE `account` = {} AND `guid` <> {}",
+                player->GetSession()->GetAccountId(), player->GetGUID().GetCounter()
+            );
 
             std::vector<uint32> Guids;
             uint32 playerAccountID = pPlayer->GetSession()->GetAccountId();
@@ -46,7 +51,64 @@ public:
             if (!result1)
                 return;
 
-            do
+            QueryResult spells = CharacterDatabase.Query("SELECT DISTINCT `spell` FROM `character_spell` WHERE `guid` IN({})", implodeGuids(guids).c_str());
+
+            if (!spells)
+                return;
+
+            do {
+                const SpellEntry* spell = sSpellStore.LookupEntry(spells->Fetch()[0].Get<uint32>());
+
+                if (!player->HasSpell(spell->Id) && isSpellCompatible(spell, player) && hasRidingSkill(player))
+                    player->learnSpell(spell->Id);
+
+            } while (spells->NextRow());
+       }
+	}
+private:
+    /*
+    * Glue character guids in line for spell query.
+    */
+    std::string implodeGuids(QueryResult &queryResult)
+    {
+        uint8 i = 0;
+        std::string condition;
+
+        do {
+            if (i)
+                condition += ",";
+
+            condition += std::to_string(queryResult->Fetch()[0].Get<uint32>());
+            ++i;
+        } while (queryResult->NextRow());
+
+        return condition;
+    }
+
+    /*
+    * Check all compatibility for spell.
+    */
+    bool isSpellCompatible(const SpellEntry* spell, Player* player)
+    {
+        return isMount(spell) && isRaceCompatible(spell, player) && isClassCompatible(spell, player);
+    }
+
+    /*
+    * Check spell on mount type.
+    */
+    bool isMount(const SpellEntry* spell)
+    {
+        return spell->Effect[0] == SPELL_EFFECT_APPLY_AURA && spell->EffectApplyAuraName[0] == SPELL_AURA_MOUNTED;
+    }
+
+    /*
+    * Check spell on race compatibility.
+    */
+    bool isRaceCompatible(const SpellEntry* spell, Player* player)
+    {
+        if (sConfigMgr->GetOption<bool>("Account.Mounts.StrictRace", true))
+        {
+            if (spell->AttributesEx7 & SPELL_ATTR7_ALLIANCE_SPECIFIC_SPELL)
             {
                 Field* fields = result1->Fetch();
                 uint32 race = fields[1].Get<uint8>();
@@ -69,8 +131,7 @@ public:
                     Spells.push_back(result2->Fetch()[0].Get<uint32>());
                 } while (result2->NextRow());
             }
-
-            for (auto& i : Spells)
+            else if (spell->AttributesEx7 & SPELL_ATTR7_HORDE_SPECIFIC_SPELL)
             {
                 // Check if the spell is in the excluded list before learning it
                 if (excludedSpellIds.find(i) == excludedSpellIds.end())
