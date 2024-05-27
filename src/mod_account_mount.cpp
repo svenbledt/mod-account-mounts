@@ -41,7 +41,7 @@ public:
        {
             QueryResult guids = CharacterDatabase.Query(
                 "SELECT `guid` FROM `characters` WHERE `account` = {} AND `guid` <> {}",
-                pPlayer->GetSession()->GetAccountId(), pPlayer->GetGUID().GetCounter()
+                player->GetSession()->GetAccountId(), player->GetGUID().GetCounter()
             );
 
             std::vector<uint32> Guids;
@@ -59,8 +59,8 @@ public:
             do {
                 const SpellEntry* spell = sSpellStore.LookupEntry(spells->Fetch()[0].Get<uint32>());
 
-                if (!pPlayer->HasSpell(spell->Id) && isSpellCompatible(spell, pPlayer) && hasRidingSkill(pPlayer))
-                    pPlayer->learnSpell(spell->Id);
+                if (!player->HasSpell(spell->Id) && isSpellCompatible(spell, player) && hasRidingSkill(player))
+                    player->learnSpell(spell->Id);
 
             } while (spells->NextRow());
        }
